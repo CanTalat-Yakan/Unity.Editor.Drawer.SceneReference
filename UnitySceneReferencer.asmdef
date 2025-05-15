@@ -1,6 +1,6 @@
 {
     "name": "UnitySceneReferencer",
-    "rootNamespace": "UnityEssentials",
+    "rootNamespace": "",
     "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
