@@ -95,7 +95,7 @@ namespace UnityEssentials
                 ? SceneReferenceState.Regular
                 : SceneReferenceState.Unsafe;
 #else
-            return _state;
+            return _state.Value;
 #endif
         }
 
