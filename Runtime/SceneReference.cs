@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -17,8 +16,12 @@ namespace UnityEssentials
 #endif
 
         [SerializeField, HideInInspector] private string _scenePath = string.Empty;
-        [SerializeField, HideInInspector] private GUID _guid = default;
+        [SerializeField, HideInInspector] private string _guid = default;
         [SerializeField, HideInInspector] private int _buildIndex = -1;
+
+        public string Guid => GetSceneGuid();
+        public int BuildIndex => _buildIndex;
+        public string Name => System.IO.Path.GetFileNameWithoutExtension(Path);
 
         public string Path
         {
@@ -40,35 +43,39 @@ namespace UnityEssentials
             }
         }
 
-        public GUID Guid => GetSceneGuid();
-        public int BuildIndex => _buildIndex;
-        public string Name => System.IO.Path.GetFileNameWithoutExtension(Path);
-
         public static implicit operator string(SceneReference sceneReference) => sceneReference.Path;
 
+        public void OnBeforeSerialize()
+        {
 #if UNITY_EDITOR
-        public void OnBeforeSerialize() =>
             UpdateSceneInfo();
+            UpdateState();
+#endif
+        }
 
-        public void OnAfterDeserialize() =>
+        public void OnAfterDeserialize()
+        {
+#if UNITY_EDITOR
             EditorApplication.update += HandleAfterDeserialize;
 #endif
+        }
 
         #region Utilities
+        private string GetSceneGuid()
+        {
+#if UNITY_EDITOR
+            if (_guid == default)
+                UpdateSceneInfo();
+#endif
+            return _guid;
+        }
+
 #if UNITY_EDITOR
         private string GetScenePath() =>
             _sceneAsset ? AssetDatabase.GetAssetPath(_sceneAsset) : _scenePath;
 
         private SceneAsset GetSceneAssetFromPath() =>
             AssetDatabase.LoadAssetAtPath<SceneAsset>(_scenePath);
-
-        private GUID GetSceneGuid()
-        {
-            if (_guid == default)
-                UpdateSceneInfo();
-
-            return _guid;
-        }
 
         private void UpdateSceneInfo()
         {
@@ -82,7 +89,7 @@ namespace UnityEssentials
             if (IsValidSceneAsset)
             {
                 _scenePath = GetScenePath();
-                _guid = AssetDatabase.GUIDFromAssetPath(_scenePath);
+                _guid = AssetDatabase.AssetPathToGUID(_scenePath);
                 _buildIndex = BuildUtilities.GetBuildScene(_sceneAsset).BuildIndex;
             }
             else
@@ -153,5 +160,5 @@ namespace UnityEssentials
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label) =>
             EditorGUIUtility.singleLineHeight;
     }
-}
 #endif
+}

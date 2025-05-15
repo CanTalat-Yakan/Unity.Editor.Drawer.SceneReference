@@ -24,7 +24,7 @@ namespace UnityEssentials
         public SceneReferenceState State => UpdateState();
         public string Address => GetAddress();
 
-        public AssetReference AddressableReference => _addressableReference;
+        public AssetReference AddressableReference => _addressableReference ??= new AssetReference(_address);
         private AssetReference _addressableReference;
 
         #region Loading
@@ -87,12 +87,16 @@ namespace UnityEssentials
                 return _state ??= SceneReferenceState.Unsafe;
             }
 
+#if UNITY_EDITOR
             if (IsAddressableScene())
                 return _state ??= SceneReferenceState.Addressable;
 
             return _state ??= IsSceneEnabled()
                 ? SceneReferenceState.Regular
                 : SceneReferenceState.Unsafe;
+#else
+            return _state;
+#endif
         }
 
         private string GetAddress() =>
