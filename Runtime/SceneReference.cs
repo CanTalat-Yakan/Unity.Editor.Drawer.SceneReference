@@ -1,164 +1,84 @@
 using System;
 using UnityEngine;
-#if UNITY_EDITOR
-using UnityEditor;
-using UnityEditor.SceneManagement;
-#endif
+using UnityEngine.SceneManagement;
+using UnityEngine.ResourceManagement.AsyncOperations;
+using UnityEngine.ResourceManagement.ResourceProviders;
+using UnityEngine.AddressableAssets;
 
 namespace UnityEssentials
 {
-    [Serializable]
-    public partial class SceneReference : ISerializationCallbackReceiver
+    public enum SceneReferenceState
     {
-#if UNITY_EDITOR
-        [SerializeField, HideInInspector] private SceneAsset _sceneAsset;
-        private bool IsValidSceneAsset => _sceneAsset != null;
-#endif
+        Unsafe = 0,
+        Regular = 1,
+        Addressable = 2
+    }
 
+    [Serializable]
+    public partial class SceneReference
+    {
         [SerializeField, HideInInspector] private string _scenePath = string.Empty;
         [SerializeField, HideInInspector] private string _guid = default;
         [SerializeField, HideInInspector] private int _buildIndex = -1;
 
-        public string Guid => GetSceneGuid();
+        [SerializeField, HideInInspector] private Scene? _loadedScene = null;
+        [SerializeField, HideInInspector] private SceneReferenceState _state = default;
+        [SerializeField, HideInInspector] private string _address = null;
+
+        public string Guid => _guid;
         public int BuildIndex => _buildIndex;
         public string Name => System.IO.Path.GetFileNameWithoutExtension(Path);
-
-        public string Path
-        {
-            get
-            {
-#if UNITY_EDITOR
-                return GetScenePath();
-#else
-                return _scenePath;
-#endif
-            }
-            set
-            {
-                _scenePath = value;
-#if UNITY_EDITOR
-                _sceneAsset = GetSceneAssetFromPath();
-                UpdateSceneInfo();
-#endif
-            }
-        }
+        public string Path => _scenePath;
+        public Scene LoadedScene => GetLoadedScene();
+        public SceneReferenceState State => _state;
+        public string Address => _address ?? string.Empty;
+        public AssetReference AddressableReference => _addressableReference ??= new AssetReference(_address);
+        private AssetReference _addressableReference;
 
         public static implicit operator string(SceneReference sceneReference) => sceneReference.Path;
 
-        public void OnBeforeSerialize()
+        public void Load(LoadSceneMode mode = LoadSceneMode.Single)
         {
-#if UNITY_EDITOR
-            UpdateSceneInfo();
-            UpdateState();
-#endif
+            if (State == SceneReferenceState.Addressable)
+                Addressables.LoadSceneAsync(_addressableReference, mode);
+            else if (State == SceneReferenceState.Regular)
+                SceneManager.LoadScene(Path, new LoadSceneParameters(mode));
         }
 
-        public void OnAfterDeserialize()
+        public AsyncOperation LoadAsync(LoadSceneMode mode = LoadSceneMode.Single) =>
+            State == SceneReferenceState.Regular
+                ? SceneManager.LoadSceneAsync(Path, mode)
+                : null;
+
+        public AsyncOperationHandle<SceneInstance> LoadAsyncAddressable(LoadSceneMode mode = LoadSceneMode.Single) =>
+            State == SceneReferenceState.Addressable
+                ? Addressables.LoadSceneAsync(_addressableReference, mode)
+                : default;
+
+        public void Unload(LoadSceneMode mode = LoadSceneMode.Single)
         {
-#if UNITY_EDITOR
-            EditorApplication.update += HandleAfterDeserialize;
-#endif
+            if (!LoadedScene.IsValid())
+                return;
+
+            if (State == SceneReferenceState.Addressable)
+                Addressables.LoadSceneAsync(_addressableReference, mode);
+            else if (State == SceneReferenceState.Regular)
+                SceneManager.LoadScene(Path, mode);
         }
 
-        #region Utilities
-        private string GetSceneGuid()
-        {
-#if UNITY_EDITOR
-            if (_guid == default)
-                UpdateSceneInfo();
-#endif
-            return _guid;
-        }
+        public AsyncOperation UnloadAsync(LoadSceneMode mode = LoadSceneMode.Single) =>
+            LoadedScene.IsValid() && State == SceneReferenceState.Regular
+                ? SceneManager.LoadSceneAsync(Path, mode)
+                : null;
 
-#if UNITY_EDITOR
-        private string GetScenePath() =>
-            _sceneAsset ? AssetDatabase.GetAssetPath(_sceneAsset) : _scenePath;
+        public AsyncOperationHandle<SceneInstance> UnloadAsyncAddressable(LoadSceneMode mode = LoadSceneMode.Single) =>
+            LoadedScene.IsValid() && State == SceneReferenceState.Addressable
+                ? Addressables.LoadSceneAsync(_addressableReference, mode)
+                : default;
 
-        private SceneAsset GetSceneAssetFromPath() =>
-            AssetDatabase.LoadAssetAtPath<SceneAsset>(_scenePath);
-
-        private void UpdateSceneInfo()
-        {
-            if (!IsValidSceneAsset && !string.IsNullOrEmpty(_scenePath))
-            {
-                _sceneAsset = GetSceneAssetFromPath();
-                if (_sceneAsset == null)
-                    _scenePath = string.Empty;
-            }
-
-            if (IsValidSceneAsset)
-            {
-                _scenePath = GetScenePath();
-                _guid = AssetDatabase.AssetPathToGUID(_scenePath);
-                _buildIndex = BuildUtilities.GetBuildScene(_sceneAsset).BuildIndex;
-            }
-            else
-            {
-                _guid = default;
-                _buildIndex = -1;
-            }
-        }
-
-        private void HandleAfterDeserialize()
-        {
-            EditorApplication.update -= HandleAfterDeserialize;
-
-            UpdateSceneInfo();
-
-            if (!Application.isPlaying)
-                EditorSceneManager.MarkAllScenesDirty();
-        }
-
-        public static class BuildUtilities
-        {
-            public struct BuildScene
-            {
-                public int BuildIndex;
-                public string AssetPath;
-                public EditorBuildSettingsScene Scene;
-            }
-
-            public static BuildScene GetBuildScene(SceneAsset scene)
-            {
-                var path = AssetDatabase.GetAssetPath(scene);
-                var scenes = EditorBuildSettings.scenes;
-
-                for (int i = 0; i < scenes.Length; i++)
-                    if (scenes[i].path == path)
-                        return new BuildScene
-                        {
-                            BuildIndex = i,
-                            AssetPath = path,
-                            Scene = scenes[i]
-                        };
-
-                return new BuildScene { BuildIndex = -1 };
-            }
-        }
-#endif
-        #endregion
+        private Scene GetLoadedScene() =>
+            Application.isPlaying
+                ? _loadedScene ??= SceneManager.GetSceneByPath(Path)
+                : default;
     }
-
-#if UNITY_EDITOR
-    [CustomPropertyDrawer(typeof(SceneReference))]
-    public class SceneReferenceDrawer : PropertyDrawer
-    {
-        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
-        {
-            var sceneAsset = property.FindPropertyRelative("_sceneAsset");
-            var scenePath = property.FindPropertyRelative("_scenePath");
-
-            EditorGUI.BeginChangeCheck();
-            sceneAsset.objectReferenceValue = EditorGUI.ObjectField(
-                position, label, sceneAsset.objectReferenceValue, typeof(SceneAsset), false);
-
-            if (EditorGUI.EndChangeCheck())
-                if (sceneAsset.objectReferenceValue == null)
-                    scenePath.stringValue = "";
-        }
-
-        public override float GetPropertyHeight(SerializedProperty property, GUIContent label) =>
-            EditorGUIUtility.singleLineHeight;
-    }
-#endif
 }
