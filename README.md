@@ -20,7 +20,7 @@ using UnityEssentials;
 
 A serializable class for referencing Unity scenes through path, GUID, build index, or addressable address. Supports both synchronous and asynchronous loading/unloading for regular and addressable scenes. Compatible with Unity Addressables and Editor scene references.
 
----
+
 
 ## Features
 
