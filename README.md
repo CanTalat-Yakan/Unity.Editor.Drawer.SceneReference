@@ -34,7 +34,7 @@ A serializable class for referencing Unity scenes through path, GUID, build inde
   - Unload / UnloadAsync (regular)
   - UnloadAsyncAddressable
 
----
+
 
 ## Scene States
 
