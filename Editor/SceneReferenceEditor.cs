@@ -14,6 +14,25 @@ namespace UnityEssentials
         private string GetScenePath() => _sceneAsset ? AssetDatabase.GetAssetPath(_sceneAsset) : _scenePath;
         private SceneAsset GetSceneAssetFromPath() => AssetDatabase.LoadAssetAtPath<SceneAsset>(_scenePath);
 
+        public void OnBeforeSerialize()
+        {
+            UpdateSceneInfo();
+            UpdateState();
+        }
+
+        public void OnAfterDeserialize()
+        {
+            EditorApplication.update += HandleAfterDeserialize;
+        }
+
+        private void HandleAfterDeserialize()
+        {
+            EditorApplication.update -= HandleAfterDeserialize;
+            UpdateSceneInfo();
+            if (!Application.isPlaying)
+                EditorSceneManager.MarkAllScenesDirty();
+        }
+
         private void UpdateSceneInfo()
         {
             if (!IsValidSceneAsset && !string.IsNullOrEmpty(_scenePath))
@@ -36,30 +55,12 @@ namespace UnityEssentials
             }
         }
 
-        public void OnBeforeSerialize()
-        {
-            UpdateSceneInfo();
-            UpdateState();
-        }
-
-        public void OnAfterDeserialize()
-        {
-            EditorApplication.update += HandleAfterDeserialize;
-        }
-
-        private void HandleAfterDeserialize()
-        {
-            EditorApplication.update -= HandleAfterDeserialize;
-            UpdateSceneInfo();
-            if (!Application.isPlaying)
-                EditorSceneManager.MarkAllScenesDirty();
-        }
-
         private void UpdateState()
         {
             if (string.IsNullOrEmpty(Path))
             {
-                Debug.LogWarning("SceneReference is empty. It is not referencing anything!");
+                if (_state != SceneReferenceState.Unsafe)
+                    Debug.LogWarning("SceneReference is empty. It is not referencing anything!");
                 _state = SceneReferenceState.Unsafe;
                 return;
             }
