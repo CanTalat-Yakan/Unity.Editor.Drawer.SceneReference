@@ -14,3 +14,35 @@ All utilities are under the `UnityEssentials` namespace. This keeps your project
 
 ```csharp
 using UnityEssentials;
+```
+
+# SceneReference
+
+A serializable class for referencing Unity scenes through path, GUID, build index, or addressable address. Supports both synchronous and asynchronous loading/unloading for regular and addressable scenes. Compatible with Unity Addressables and Editor scene references.
+
+---
+
+## Features
+
+- Abstracts both regular and addressable scene referencing
+- Stores scene path, GUID, build index, and address
+- Lazy-loads scene instance in play mode
+- Implicit conversion to `string` returns scene path
+- Unified interface for:
+  - Load / LoadAsync (regular)
+  - LoadAsyncAddressable
+  - Unload / UnloadAsync (regular)
+  - UnloadAsyncAddressable
+
+---
+
+## Scene States
+
+```csharp
+public enum SceneReferenceState
+{
+    Unsafe = 0,      // Invalid or unrecognized state
+    Regular = 1,     // Scene loaded by path (non-addressable)
+    Addressable = 2  // Scene loaded via Addressables system
+}
+```
