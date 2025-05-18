@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.AddressableAssets.Settings;
@@ -36,15 +35,12 @@ namespace UnityEssentials
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 var objs = AssetDatabase.LoadAllAssetsAtPath(path);
                 foreach (var obj in objs)
-                {
                     if (obj is MonoBehaviour mono && mono.TryGetComponent<SceneReference>(out var sr))
                     {
                         sr.UpdateState();
                         EditorUtility.SetDirty(mono);
                     }
-                }
             }
         }
     }
 }
-#endif
