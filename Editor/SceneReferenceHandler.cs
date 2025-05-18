@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.AddressableAssets.Settings;
@@ -5,7 +6,7 @@ using static UnityEditor.AddressableAssets.Settings.AddressableAssetSettings;
 
 namespace UnityEssentials
 {
-    public partial class SceneReference : ISerializationCallbackReceiver
+    public class SceneReferenceHandler
     {
         [InitializeOnLoadMethod]
         public static void SubscribeToEvents()
@@ -35,12 +36,14 @@ namespace UnityEssentials
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 var objs = AssetDatabase.LoadAllAssetsAtPath(path);
                 foreach (var obj in objs)
-                    if (obj is MonoBehaviour mono && mono.TryGetComponent<SceneReference>(out var sr))
-                    {
-                        sr.UpdateState();
-                        EditorUtility.SetDirty(mono);
-                    }
+                    if (obj.GetType().IsAssignableFrom(typeof(MonoBehaviour)))
+                        if (obj is MonoBehaviour mono && mono.TryGetComponent<SceneReference>(out var sceneReference))
+                        {
+                            sceneReference?.UpdateState();
+                            EditorUtility.SetDirty(mono);
+                        }
             }
         }
     }
 }
+#endif
