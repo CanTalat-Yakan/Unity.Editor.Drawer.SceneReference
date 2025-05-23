@@ -18,10 +18,6 @@ namespace UnityEssentials
         /// </summary>
         /// <remarks>This method displays an object field for selecting a <see cref="SceneAsset"/>. If the
         /// selected scene asset is cleared,  the associated scene path is also reset to an empty string.</remarks>
-        /// <param name="position">The rectangle on the screen to use for the property GUI.</param>
-        /// <param name="property">The serialized property to edit. This property is expected to contain a reference to a scene asset and its
-        /// path.</param>
-        /// <param name="label">The label to display alongside the property field.</param>
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             var sceneAsset = property.FindPropertyRelative("_sceneAsset");
