@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using UnityEditor;
 
 namespace UnityEssentials
@@ -52,3 +53,4 @@ namespace UnityEssentials
         }
     }
 }
+#endif
