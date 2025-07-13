@@ -72,10 +72,10 @@ namespace UnityEssentials
             foreach (var guid in guids)
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
-                var objs = AssetDatabase.LoadAllAssetsAtPath(path);
-                foreach (var obj in objs)
-                    if (obj.GetType().IsAssignableFrom(typeof(MonoBehaviour)))
-                        if (obj is MonoBehaviour mono && mono.TryGetComponent<SceneReference>(out var sceneReference))
+                var loadedAssets = AssetDatabase.LoadAllAssetsAtPath(path);
+                foreach (var asset in loadedAssets)
+                    if (asset.GetType().IsAssignableFrom(typeof(MonoBehaviour)))
+                        if (asset is MonoBehaviour mono && mono.TryGetComponent<SceneReference>(out var sceneReference))
                         {
                             sceneReference?.UpdateState();
                             EditorUtility.SetDirty(mono);
