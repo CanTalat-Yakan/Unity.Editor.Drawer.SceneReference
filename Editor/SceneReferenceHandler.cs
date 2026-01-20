@@ -63,7 +63,7 @@ namespace UnityEssentials
         /// Revalidates all <see cref="SceneReference"/> instances in the project.
         /// </summary>
         /// <remarks>This method scans all assets in the project for <see cref="MonoBehaviour"/>
-        /// components  containing a <see cref="SceneReference"/> and updates their state. It marks the modified 
+        /// components  containing a <see cref="SceneReference"/> and updates their state. It marks the modified
         /// objects as dirty to ensure changes are saved.</remarks>
         private static void RevalidateAllSceneReferences()
         {
