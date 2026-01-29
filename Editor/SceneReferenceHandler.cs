@@ -1,7 +1,9 @@
 #if UNITY_EDITOR
-using UnityEngine;
+using System;
 using UnityEditor;
 using UnityEditor.AddressableAssets.Settings;
+using UnityEngine;
+using Object = UnityEngine.Object;
 using static UnityEditor.AddressableAssets.Settings.AddressableAssetSettings;
 
 namespace UnityEssentials
@@ -14,6 +16,10 @@ namespace UnityEssentials
     /// cref="SceneReference"/> instances in the project remain up-to-date.</remarks>
     public class SceneReferenceHandler
     {
+        private static bool _subscribed;
+        private static bool _revalidateQueued;
+        private static bool _isRevalidating;
+
         /// <summary>
         /// Subscribes to global and editor-specific events to handle changes in build settings and addressable assets.
         /// </summary>
@@ -24,7 +30,14 @@ namespace UnityEssentials
         [InitializeOnLoadMethod]
         public static void SubscribeToEvents()
         {
+            if (_subscribed)
+                return;
+            _subscribed = true;
+
+            EditorBuildSettings.sceneListChanged -= OnBuildSettingsChanged;
             EditorBuildSettings.sceneListChanged += OnBuildSettingsChanged;
+
+            OnModificationGlobal -= OnAddressablesChanged;
             OnModificationGlobal += OnAddressablesChanged;
         }
 
@@ -34,29 +47,40 @@ namespace UnityEssentials
         /// <remarks>This method is triggered when the build settings are modified. It ensures that all
         /// scene references remain valid and up-to-date after the changes.</remarks>
         private static void OnBuildSettingsChanged() =>
-            RevalidateAllSceneReferences();
+            QueueRevalidateAllSceneReferences();
 
         /// <summary>
         /// Handles changes to Addressable Asset settings and triggers revalidation of all addressable changes.
         /// </summary>
-        /// <param name="settings">The <see cref="AddressableAssetSettings"/> instance that was modified.</param>
+        /// <param name="_">The addressable settings instance (unused).</param>
         /// <param name="modEvent">The type of modification event that occurred.</param>
-        /// <param name="obj">An object containing additional data related to the modification event.</param>
-        private static void OnAddressablesChanged(AddressableAssetSettings settings, ModificationEvent modEvent, object obj) =>
-            RevalidateAllAddressablesChanges(settings, modEvent, obj);
+        /// <param name="__">Additional event data (unused).</param>
+        private static void OnAddressablesChanged(AddressableAssetSettings _, ModificationEvent modEvent, object __) =>
+            RevalidateAllAddressablesChanges(modEvent);
 
         /// <summary>
         /// Revalidates all scene references when specific addressable asset modifications occur.
         /// </summary>
-        /// <param name="settings">The addressable asset settings associated with the modification event.</param>
         /// <param name="modEvent">The type of modification event that occurred. Must be <see cref="ModificationEvent.EntryAdded"/>, <see
         /// cref="ModificationEvent.EntryRemoved"/>, or <see cref="ModificationEvent.EntryModified"/> to trigger
         /// revalidation.</param>
-        /// <param name="obj">An object associated with the modification event. This parameter is not used in the revalidation process.</param>
-        private static void RevalidateAllAddressablesChanges(AddressableAssetSettings settings, ModificationEvent modEvent, object obj)
+        private static void RevalidateAllAddressablesChanges(ModificationEvent modEvent)
         {
             if (modEvent == ModificationEvent.EntryAdded || modEvent == ModificationEvent.EntryRemoved || modEvent == ModificationEvent.EntryModified)
+                QueueRevalidateAllSceneReferences();
+        }
+
+        private static void QueueRevalidateAllSceneReferences()
+        {
+            if (_revalidateQueued)
+                return;
+
+            _revalidateQueued = true;
+            EditorApplication.delayCall += () =>
+            {
+                _revalidateQueued = false;
                 RevalidateAllSceneReferences();
+            };
         }
 
         /// <summary>
@@ -67,20 +91,136 @@ namespace UnityEssentials
         /// objects as dirty to ensure changes are saved.</remarks>
         private static void RevalidateAllSceneReferences()
         {
-            // Find and update all SceneReference instances in the project
-            var guids = AssetDatabase.FindAssets("t:ScriptableObject t:GameObject");
-            foreach (var guid in guids)
+            if (_isRevalidating)
+                return;
+
+            _isRevalidating = true;
+            try
             {
-                var path = AssetDatabase.GUIDToAssetPath(guid);
-                var loadedAssets = AssetDatabase.LoadAllAssetsAtPath(path);
-                foreach (var asset in loadedAssets)
-                    if (asset.GetType().IsAssignableFrom(typeof(MonoBehaviour)))
-                        if (asset is MonoBehaviour mono && mono.TryGetComponent<SceneReference>(out var sceneReference))
-                        {
-                            sceneReference?.UpdateState();
-                            EditorUtility.SetDirty(mono);
-                        }
+                // Scan serialized objects for fields of type SceneReference and call UpdateState.
+                // We keep this Editor-only and conservative to avoid impacting build settings UI.
+                var guids = AssetDatabase.FindAssets("t:ScriptableObject t:GameObject");
+                foreach (var guid in guids)
+                {
+                    var path = AssetDatabase.GUIDToAssetPath(guid);
+                    var mainAssetType = AssetDatabase.GetMainAssetTypeAtPath(path);
+
+                    if (mainAssetType == typeof(GameObject))
+                    {
+                        var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                        if (go != null)
+                            RevalidateUnityObject(go);
+                    }
+                    else
+                    {
+                        var so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+                        if (so != null)
+                            RevalidateUnityObject(so);
+                    }
+                }
             }
+            finally
+            {
+                _isRevalidating = false;
+            }
+        }
+
+        private static void RevalidateUnityObject(Object obj)
+        {
+            // Prefabs: walk all components.
+            if (obj is GameObject go)
+            {
+                var components = go.GetComponentsInChildren<Component>(true);
+                foreach (var c in components)
+                {
+                    if (c == null)
+                        continue;
+                    RevalidateSerializedObject(c);
+                }
+                return;
+            }
+
+            // ScriptableObjects.
+            RevalidateSerializedObject(obj);
+        }
+
+        private static void RevalidateSerializedObject(Object target)
+        {
+            var so = new SerializedObject(target);
+            var changed = false;
+
+            SerializedProperty iterator = so.GetIterator();
+            var enterChildren = true;
+            while (iterator.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+
+                // Look for SceneReference's backing field pattern: a generic-serialized blob that contains _scenePath etc.
+                if (iterator.propertyType != SerializedPropertyType.Generic)
+                    continue;
+
+                // Fast check: do we have at least the _scenePath child?
+                var scenePathProp = iterator.FindPropertyRelative("_scenePath");
+                if (scenePathProp == null)
+                    continue;
+
+                // Heuristic: ensure this generic property looks like SceneReference by checking for expected children.
+                var guidProp = iterator.FindPropertyRelative("_guid");
+                var buildIndexProp = iterator.FindPropertyRelative("_buildIndex");
+                if (guidProp == null || buildIndexProp == null)
+                    continue;
+
+                // Create a managed SceneReference instance and sync the key serialized data into it.
+                // Then call UpdateState and write back the updated state fields.
+                var sr = new SceneReference();
+
+                // Write into the private backing fields via SerializedObject on a temp ScriptableObject is overkill;
+                // instead use reflection for these specific fields.
+                // NOTE: This is Editor-only; reflection cost is acceptable since we're debounced.
+                var t = typeof(SceneReference);
+                SetPrivateField(t, sr, "_scenePath", scenePathProp.stringValue);
+                SetPrivateField(t, sr, "_guid", guidProp.stringValue);
+                SetPrivateField(t, sr, "_buildIndex", buildIndexProp.intValue);
+
+                // Call UpdateState (Editor partial).
+                sr.UpdateState();
+
+                // Write back state + address (UpdateState/IsAddressableScene can update these).
+                var stateProp = iterator.FindPropertyRelative("_state");
+                if (stateProp != null)
+                {
+                    var newState = (int)sr.State;
+                    if (stateProp.enumValueIndex != newState)
+                    {
+                        stateProp.enumValueIndex = newState;
+                        changed = true;
+                    }
+                }
+
+                var addressProp = iterator.FindPropertyRelative("_address");
+                if (addressProp != null)
+                {
+                    var newAddress = sr.Address;
+                    if (addressProp.stringValue != newAddress)
+                    {
+                        addressProp.stringValue = newAddress;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed)
+            {
+                so.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(target);
+            }
+        }
+
+        private static void SetPrivateField(Type type, object instance, string fieldName, object value)
+        {
+            var field = type.GetField(fieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (field != null)
+                field.SetValue(instance, value);
         }
     }
 }
