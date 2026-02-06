@@ -1,12 +1,12 @@
 {
-  "name": "com.unityessentials.scenereferencer",
-  "version": "1.0.0",
-  "displayName": "Unity Editor Drawer SceneReferencer",
+  "name": "com.unityessentials.editor.drawer.scenereferencer",
+  "version": "2.0.0",
+  "displayName": "Editor Drawer SceneReferencer",
   "description": "This is a part of the UnityEssentials Ecosystem",
   "unity": "6000.0",
   "unityRelease": "",
   "dependencies": {
-    "com.unity.addressables": "2.7.4"
+    "com.unity.addressables": "2.8.0"
   },
   "keywords": [],
   "author": {
