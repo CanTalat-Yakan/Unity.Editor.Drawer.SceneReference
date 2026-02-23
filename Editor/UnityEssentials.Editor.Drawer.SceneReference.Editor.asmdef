@@ -1,5 +1,5 @@
 {
-    "name": "UnityEssentials.SceneReferencer.Editor",
+    "name": "UnityEssentials.Editor.Drawer.SceneReference.Editor",
     "rootNamespace": "UnityEssentials",
     "references": [
         "GUID:69448af7b92c7f342b298e06a37122aa",
